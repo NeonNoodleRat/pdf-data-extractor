@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import datetime
 from pdf2image import convert_from_path, pdfinfo_from_path
 from PIL import Image
+import time
 
 # Path to the folder containing all PDFs
 SOURCE_FOLDER = "/home/shared/usacs_documents"
@@ -123,10 +124,11 @@ def validate_extracted_data(data):
         if 'verified' in auth_info or 'auth' in auth_info:
             validated['document_status'] = "Verified"
 
-    # # Facility name correction
-    # facility_name = validated.get('facility_name', '')
-    # if 'adventist' in facility_name.lower() and 'white oak' not in facility_name.lower():
-    #     validated['facility_name'] = "White Oak Medical Center"
+   
+    # Facility name cleanup - remove ** markdown formatting
+    facility_name = validated.get('facility_name', '')
+    if facility_name.startswith('**') and facility_name.endswith('**'):
+        validated['facility_name'] = facility_name.strip('*').strip()
 
     # Location format check
     location = validated.get('location', '')
@@ -406,6 +408,20 @@ def main():
                 print("  ❌ ERROR: Failed to convert PDF to images")
                 error_count += 1
                 continue
+
+            # start_convert = time.time()
+            # image_paths = convert_pdf_to_images(pdf_path, IMAGES_FOLDER)
+            # convert_time = time.time() - start_convert
+
+            # start_header = time.time()
+            # header_info = ollama_process_image(image_paths["first"], debug=False)
+            # header_time = time.time() - start_header
+
+            # start_sig = time.time()
+            # sig_date = extract_electronic_signature_date(image_paths["last"], debug=False)
+            # sig_time = time.time() - start_sig
+
+            #print(f"  PDF Convert: {convert_time:.1f}s | Header Extract: {header_time:.1f}s | Sig Extract: {sig_time:.1f}s")
 
             # Extract header data from first page
             print("  📋 Extracting header info...")
