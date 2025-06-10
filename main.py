@@ -123,10 +123,10 @@ def validate_extracted_data(data):
         if 'verified' in auth_info or 'auth' in auth_info:
             validated['document_status'] = "Verified"
 
-    # Facility name correction
-    facility_name = validated.get('facility_name', '')
-    if 'adventist' in facility_name.lower() and 'white oak' not in facility_name.lower():
-        validated['facility_name'] = "White Oak Medical Center"
+    # # Facility name correction
+    # facility_name = validated.get('facility_name', '')
+    # if 'adventist' in facility_name.lower() and 'white oak' not in facility_name.lower():
+    #     validated['facility_name'] = "White Oak Medical Center"
 
     # Location format check
     location = validated.get('location', '')
@@ -195,7 +195,7 @@ def ollama_process_image(image_path, debug=False):
         "discharge_date": "discharge date if this appears to be a discharge", 
         "attending_physician": "attending doctor's name",
         "location": "patient location including LD: prefix if present",
-        "facility_name": "specific medical center name (not parent organization)",
+        "facility_name": "facility name in bold text located in the top right area above the address",
         "facility_address": "facility street address",
         "facility_city": "facility city",
         "facility_state": "facility state",
