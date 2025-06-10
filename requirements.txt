@@ -1,0 +1,5 @@
+pandas
+pdf2image
+ollama
+pydantic
+poppler

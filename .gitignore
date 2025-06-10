@@ -1,0 +1,10 @@
+# Ignore CSV files
+*.csv
+
+# Ignore JSON files
+*.json
+
+# Ignore specific folders
+json_output/
+images/
+documents/
