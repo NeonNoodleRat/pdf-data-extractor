@@ -12,7 +12,7 @@ SOURCE_FOLDER = "documents"
 JSON_OUTPUT_FOLDER = "json_output"
 # Folder where temporary images will be written
 IMAGES_FOLDER = "images"
-MODEL_NAME = "gemma3:4b"
+MODEL_NAME = "gemma3:27b"
 
 def crop_image_to_header(image_path, crop_fraction=0.33):
     """Crop image to top portion (header section only)."""
