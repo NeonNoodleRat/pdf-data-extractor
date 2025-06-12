@@ -12,7 +12,7 @@ SOURCE_FOLDER = "documents"
 JSON_OUTPUT_FOLDER = "json_output"
 # Folder where temporary images will be written
 IMAGES_FOLDER = "images"
-MODEL_NAME = "gemma3:27b"
+MODEL_NAME = "gemma3:4b"
 
 def crop_image_to_header(image_path, crop_fraction=0.33):
     """Crop image to top portion (header section only)."""
@@ -176,10 +176,10 @@ def validate_extracted_data(data):
         if 'verified' in auth_info or 'auth' in auth_info:
             validated['document_status'] = "Verified"
 
-    # Facility name correction
+    # Facility name cleanup - remove ** markdown formatting
     facility_name = validated.get('facility_name', '')
-    if 'adventist' in facility_name.lower() and 'white oak' not in facility_name.lower():
-        validated['facility_name'] = "White Oak Medical Center"
+    if facility_name.startswith('**') and facility_name.endswith('**'):
+        validated['facility_name'] = facility_name.strip('*').strip()
 
     # Location format check
     location = validated.get('location', '')
@@ -228,6 +228,7 @@ def ollama_process_image(image_path, debug=False):
 
     Pay special attention to:
     - Patient name: appears after "Patient:"
+    - MRN: appears after "MRN:"
     - DOB: appears after "DOB/Age/Sex:" in MM/DD/YYYY format
     - Gender: appears after the age in the DOB/Age/Sex line
     - Admit/Disch dates: appears after "Admit/Disch.:" (this could be admission or discharge date)
@@ -241,12 +242,13 @@ def ollama_process_image(image_path, debug=False):
     {{
         "patient_name": "patient's full name",
         "date_of_birth": "DOB in MM/DD/YYYY format",
+        "MRN": "Medical Record Number (MRN) if available",
         "gender": "Male/Female/Other",
-        "admit_date": "admission date if this appears to be an admission",
-        "discharge_date": "discharge date if this appears to be a discharge", 
+        "admit_date": "first date from Admit/Disch field (before the / if two dates present)",
+        "discharge_date": "second date from Admit/Disch field (after the / if two dates present, otherwise N/A)",
         "attending_physician": "attending doctor's name",
         "location": "patient location including LD: prefix if present",
-        "facility_name": "specific medical center name (not parent organization)",
+        "facility_name": "facility name in bold text located in the top right area above the address",
         "facility_address": "facility street address",
         "facility_city": "facility city",
         "facility_state": "facility state",
