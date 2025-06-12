@@ -410,6 +410,9 @@ def main():
         if fname.lower().endswith(".pdf")
     ]
 
+    # only process the first 4 PDFs
+    all_pdfs = all_pdfs[:4]
+
     if not all_pdfs:
         print("No PDF files found in the source folder.")
         return
