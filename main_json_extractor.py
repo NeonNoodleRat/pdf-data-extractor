@@ -242,7 +242,7 @@ def ollama_process_image(image_path, debug=False):
     {{
         "patient_name": "patient's full name",
         "date_of_birth": "DOB in MM/DD/YYYY format",
-        "MRN": "Medical Record Number (MRN) if available",
+        "medical_record_number": "Medical Record Number (MRN) if available",
         "gender": "Male/Female/Other",
         "admit_date": "first date from Admit/Disch field (before the / if two dates present)",
         "discharge_date": "second date from Admit/Disch field (after the / if two dates present, otherwise N/A)",
