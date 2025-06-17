@@ -123,7 +123,6 @@ def validate_extracted_data(data):
         auth_info = validated.get('authenticated_by', '').lower()
         if 'verified' in auth_info or 'auth' in auth_info:
             validated['document_status'] = "Verified"
-
    
     # Facility name cleanup - remove ** markdown formatting
     facility_name = validated.get('facility_name', '')
