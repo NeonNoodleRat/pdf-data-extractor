@@ -381,11 +381,25 @@ def process_facesheet_pdf(pdf_path, output_folder, debug=False):
         print(f"  ❌ ERROR processing {filename}: {e}")
         return False
 
+def generate_schema():
+    """Generate and save the JSON schema for the FacesheetObject model."""
+    schema = FacesheetObject.model_json_schema()
+    schema_path = os.path.join(OUTPUT_FOLDER, "facesheet_schema.json")
+    
+    with open(schema_path, 'w') as f:
+        json.dump(schema, f, indent=2)
+    
+    print(f"📋 JSON Schema saved to: {schema_path}")
+    return schema_path
+
 def main():
     # Ensure output folders exist
     for folder in [OUTPUT_FOLDER, IMAGES_FOLDER]:
         if not os.path.exists(folder):
             os.makedirs(folder)
+
+    # Generate and save the schema
+    generate_schema()
 
     # Load checkpoint
     processed = load_checkpoint()
@@ -462,4 +476,23 @@ if __name__ == "__main__":
     print(f"Output folder: {OUTPUT_FOLDER}")
     print(f"Images temporary folder: {IMAGES_FOLDER}")
     print("=" * 60)
-    main()
+    
+    # Add command line options
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--schema-only":
+        # Just generate schema and exit
+        if not os.path.exists(OUTPUT_FOLDER):
+            os.makedirs(OUTPUT_FOLDER)
+        schema_path = generate_schema()
+        print(f"Schema generated at: {schema_path}")
+        print("Use 'python script.py --view-schema' to view the schema")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--view-schema":
+        # Display the schema
+        schema = FacesheetObject.model_json_schema()
+        print("FACESHEET JSON SCHEMA:")
+        print("=" * 60)
+        print(json.dumps(schema, indent=2))
+    else:
+        # Normal processing
+        main()
