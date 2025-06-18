@@ -7,12 +7,27 @@ from pdf2image import convert_from_path, pdfinfo_from_path
 from PIL import Image
 
 # Path to the folder containing all PDFs
-SOURCE_FOLDER = "documents"
+SOURCE_FOLDER = "/home/shared/usacs_documents"
 # Folder where JSON results are saved
 JSON_OUTPUT_FOLDER = "json_output"
 # Folder where temporary images will be written
 IMAGES_FOLDER = "images"
+# Name of the checkpoint file in the working directory
+CHECKPOINT_FILE = "processed_files_json.json"
 MODEL_NAME = "gemma3:27b"
+
+def load_checkpoint():
+    """Load the set of already-processed filenames from JSON checkpoint."""
+    if os.path.exists(CHECKPOINT_FILE):
+        with open(CHECKPOINT_FILE, "r") as f:
+            processed_list = json.load(f)
+        return set(processed_list)
+    return set()
+
+def save_checkpoint(processed_set):
+    """Write the processed filenames set back to the JSON checkpoint."""
+    with open(CHECKPOINT_FILE, "w") as f:
+        json.dump(sorted(processed_set), f, indent=2)
 
 def crop_image_to_header(image_path, crop_fraction=0.33):
     """Crop image to top portion (header section only)."""
@@ -317,6 +332,7 @@ def ollama_process_image(image_path, debug=False):
         error_data = {
             "patient_name": "EXTRACTION_FAILED",
             "date_of_birth": "EXTRACTION_FAILED",
+            "medical_record_number": "EXTRACTION_FAILED",
             "gender": "EXTRACTION_FAILED",
             "admit_date": "EXTRACTION_FAILED",
             "discharge_date": "EXTRACTION_FAILED",
@@ -343,6 +359,7 @@ def ollama_process_image(image_path, debug=False):
         error_data = {
             "patient_name": "EXTRACTION_FAILED",
             "date_of_birth": "EXTRACTION_FAILED",
+            "medical_record_number": "EXTRACTION_FAILED",
             "gender": "EXTRACTION_FAILED",
             "admit_date": "EXTRACTION_FAILED",
             "discharge_date": "EXTRACTION_FAILED",
@@ -400,6 +417,9 @@ def main():
         if not os.path.exists(folder):
             os.makedirs(folder)
 
+    # Load checkpoint
+    processed = load_checkpoint()
+
     # Fetch list of all PDFs in source folder
     if not os.path.exists(SOURCE_FOLDER):
         print(f"Source folder '{SOURCE_FOLDER}' not found!")
@@ -410,14 +430,14 @@ def main():
         if fname.lower().endswith(".pdf")
     ]
 
-    # only process the first 4 PDFs
-    all_pdfs = all_pdfs[:4]
+    # Filter out already-processed files
+    to_process = [f for f in all_pdfs if f not in processed]
 
-    if not all_pdfs:
-        print("No PDF files found in the source folder.")
+    if not to_process:
+        print("No unprocessed PDF files found in the source folder.")
         return
 
-    print(f"Found {len(all_pdfs)} PDFs to process")
+    print(f"Found {len(all_pdfs)} total PDFs, {len(to_process)} to process")
     print("=" * 50)
 
     # Track counts and time
@@ -425,8 +445,8 @@ def main():
     error_count = 0
     start_time = datetime.now()
 
-    for idx, filename in enumerate(all_pdfs, start=1):
-        print(f"[{idx}/{len(all_pdfs)}] Processing: {filename}")
+    for idx, filename in enumerate(to_process, start=1):
+        print(f"[{idx}/{len(to_process)}] Processing: {filename}")
         pdf_path = os.path.join(SOURCE_FOLDER, filename)
 
         try:
@@ -435,6 +455,9 @@ def main():
             if not image_paths:
                 print("  ❌ ERROR: Failed to convert PDF to images")
                 error_count += 1
+                # Mark as processed to avoid retrying failed conversions
+                processed.add(filename)
+                save_checkpoint(processed)
                 continue
 
             # Extract header data from first page
@@ -464,6 +487,10 @@ def main():
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(final_data, f, indent=2, ensure_ascii=False)
 
+            # Mark as processed and update checkpoint
+            processed.add(filename)
+            save_checkpoint(processed)
+
             successful_count += 1
             patient_name = header_info.get("patient_name", "Unknown")
             sig_out = sig_date if sig_date != "N/A" else "No signature"
@@ -471,9 +498,20 @@ def main():
             print(f"  ✅ SUCCESS: {patient_name} | Sig: {sig_out} | Text: {text_chars} chars")
             print(f"  💾 Saved: {json_path}")
 
+            # Progress update every 25 files
+            if successful_count % 25 == 0:
+                elapsed = datetime.now() - start_time
+                avg_time = elapsed.total_seconds() / successful_count
+                remaining = len(to_process) - idx
+                est_remaining = avg_time * remaining / 60  # minutes
+                print(f"  ⏱️  Progress: {successful_count}/{len(to_process)} | Est. remaining: {est_remaining:.1f} min")
+
         except Exception as e:
             print(f"  ❌ ERROR processing {filename}: {e}")
             error_count += 1
+            # Still mark as processed to avoid infinite retries
+            processed.add(filename)
+            save_checkpoint(processed)
             continue
 
     # Final summary
@@ -485,13 +523,15 @@ def main():
     print(f"Errors: {error_count}")
     print(f"Total time: {total_time}")
     print(f"JSON files saved to: {JSON_OUTPUT_FOLDER}/")
+    print(f"Checkpoint saved at: {CHECKPOINT_FILE}")
     print("="*50)
 
 if __name__ == "__main__":
-    print("PDF to JSON Data Extractor v1.0")
+    print("PDF to JSON Data Extractor v2.0")
     print("=" * 60)
     print(f"Source folder: {SOURCE_FOLDER}")
     print(f"JSON output folder: {JSON_OUTPUT_FOLDER}")
     print(f"Images temporary folder: {IMAGES_FOLDER}")
+    print(f"Checkpoint file: {CHECKPOINT_FILE}")
     print("=" * 60)
     main()
