@@ -58,16 +58,27 @@ def extract_jpeg_from_hex(hex_string, output_path="extracted_image.jpg"):
         return False
 
 def main():
-    # PASTE YOUR HEX STRING HERE (replace the placeholder)
-    hex_string = "PASTE_YOUR_HEX_STRING_HERE"
+    # Option 1: Read from file (RECOMMENDED for long hex strings)
+    hex_file = "hex_data.txt"  # Create this file and paste your hex string there
     
-    # Example of what it should look like:
-    # hex_string = "0xFFD8FFE000104A464946..."
-    
-    if hex_string == "PASTE_YOUR_HEX_STRING_HERE":
-        print("❌ Please paste your hex string in the 'hex_string' variable!")
-        print("Replace 'PASTE_YOUR_HEX_STRING_HERE' with your actual hex data.")
-        return
+    if os.path.exists(hex_file):
+        print(f"📁 Reading hex data from {hex_file}...")
+        try:
+            with open(hex_file, 'r') as f:
+                hex_string = f.read().strip()
+        except Exception as e:
+            print(f"❌ Error reading file: {e}")
+            return
+    else:
+        # Option 2: Paste directly in code (for shorter hex strings)
+        hex_string = "PASTE_YOUR_HEX_STRING_HERE"
+        
+        if hex_string == "PASTE_YOUR_HEX_STRING_HERE":
+            print("❌ No hex data found!")
+            print("Either:")
+            print("1. Create a file called 'hex_data.txt' and paste your hex string there, OR")
+            print("2. Replace 'PASTE_YOUR_HEX_STRING_HERE' with your hex data")
+            return
     
     # Extract the image
     success = extract_jpeg_from_hex(hex_string, "extracted_image.jpg")
