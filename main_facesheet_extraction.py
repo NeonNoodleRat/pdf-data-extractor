@@ -26,6 +26,7 @@ class Address(BaseModel):
 
 class PatientInformation(BaseModel):
     # Removed account_number - now at top level only
+    patient_name: Optional[str] = None  # Added patient name
     race: Optional[str] = None
     ssn: Optional[str] = None
     encrypted_ssn: Optional[str] = None
@@ -155,14 +156,21 @@ def extract_facesheet_data(image_paths, debug=False):
     extraction_prompt = """
     Looking at this facesheet document, please extract ALL available information and format it as JSON.
     
-    CRITICAL: If SSN is redacted (shows *** or XXX), set it to null.
-    CRITICAL: If any field is not clearly visible, use null (not empty string).
+    CRITICAL INSTRUCTIONS:
+    - If SSN is redacted (shows *** or XXX), set it to null
+    - If any field is not clearly visible or NOT PRESENT on the document, use null
+    - DO NOT make up or infer data - only extract what you can clearly see
+    - Account numbers may be long (10+ digits) - extract the full number
+    - Look carefully for patient name after "Patient Name:" label
+    - Look for race after "Race:" label 
+    - Only set bed number if you see "Bed:" label - otherwise null
+    - Medical Record Number: look for "MRN:" or "Medical Record Number:" - if not found, use null
     
-    Extract the following comprehensive information:
-    
-    PATIENT INFORMATION:
-    - Race, marital status, veteran status  
-    - SSN (null if redacted), bed/room number
+    PATIENT INFORMATION TO EXTRACT:
+    - Patient name (appears after "Patient Name:" label)
+    - Race (appears after "Race:" label)
+    - Marital status, veteran status  
+    - SSN (null if redacted), bed/room number (null if not labeled as "Bed:")
     - Home address (street, city, state, zip)
     - Phone numbers (home, business/work)
     - Primary language, county code
@@ -175,105 +183,119 @@ def extract_facesheet_data(image_paths, debug=False):
     - Emergency contact information (name, phone, relation)
     - Employer information (name, phone, address)
     
-    INSURANCE INFORMATION (up to 3 plans):
-    - Insurance company name, plan ID, policy number, group number/name
-    - Insurance company phone and address
-    - Insured person's name, DOB, address, relation to patient
-    - Authorization numbers
+    INSURANCE INFORMATION (look for sections like "INSURANCE INFORMATION"):
+    - Insurance company name (like "COMMUNITY HLTH MP(CMX)")
+    - Policy number, group number, group name
+    - Insurance company phone number
+    - Insurance company address (mailing address)
+    - Insured name (may say "patient name" or actual name)
+    - Insured date of birth
+    - Insured address
+    - Relationship to patient (like "SELF")
+    - Authorization number
+    - Plan ID or certificate number
     
     TOP LEVEL INFORMATION:
     - Patient gender, date of birth
-    - Account number, medical record number, visit number
-    - Admit date/time, room/bed assignment
+    - Account number (may be 10+ digits - extract FULL number)
+    - Medical record number (look for "MRN:" - null if not found)
+    - Visit number
+    - Admit date/time, room assignment
     - Attending/referring physician, location/department name
     
-    Format as JSON with this FLATTENED structure (note: account_number at TOP level only):
+    Format as JSON with this FLATTENED structure:
     {
         "gender": "",
         "date_of_birth": "",
         "admit_date_time": "",
         "room": "",
-        "medical_record_number": "",
+        "medical_record_number": null,
         "account_number": "",
         "visit_number": "",
         "location_name": "",
         "referring_physician": "",
         "patient_information": {
+            "patient_name": "",
             "race": "",
             "ssn": null,
             "encrypted_ssn": "",
-            "bed": "",
-            "mothers_maiden_name": "",
-            "alias": "",
+            "bed": null,
+            "mothers_maiden_name": null,
+            "alias": null,
             "marital_status": "",
             "veteran_status": "",
             "address": {
                 "line_one": "",
-                "line_two": "",
+                "line_two": null,
                 "city": "",
                 "state": "",
                 "zip": ""
             },
             "home_phone": "",
-            "business_phone": "",
+            "business_phone": null,
             "primary_language": "",
-            "county_code": "",
-            "drivers_license_number": ""
+            "county_code": null,
+            "drivers_license_number": null
         },
         "guarantor_information": {
             "name": "",
             "phone": "",
             "ssn": null,
-            "encrypted_ssn": "",
+            "encrypted_ssn": null,
             "address": {
                 "line_one": "",
-                "line_two": "",
+                "line_two": null,
                 "city": "",
                 "state": "",
                 "zip": ""
             },
-            "contact_name": "",
-            "contact_phone": "",
-            "contact_relation": "",
-            "employer_name": "",
-            "employer_phone": "",
-            "employer_address": {
-                "line_one": "",
-                "line_two": "",
-                "city": "",
-                "state": "",
-                "zip": ""
-            }
+            "contact_name": null,
+            "contact_phone": null,
+            "contact_relation": null,
+            "employer_name": null,
+            "employer_phone": null,
+            "employer_address": null
         },
         "insurance_plan_one": {
             "plan_id": "",
             "policy_number": "",
             "group_number": "",
-            "group_name": "",
+            "group_name": null,
             "insurance_name": "",
+            "insurance_company_id": null,
             "insurance_phone_number": "",
             "insurance_address": {
                 "line_one": "",
-                "line_two": "",
+                "line_two": null,
                 "city": "",
                 "state": "",
                 "zip": ""
             },
             "insured_name": "",
-            "insured_dob": "",
+            "insured_dob": null,
             "insured_address": {
-                "line_one": "",
-                "line_two": "",
-                "city": "",
-                "state": "",
-                "zip": ""
+                "line_one": null,
+                "line_two": null,
+                "city": null,
+                "state": null,
+                "zip": null
             },
             "insured_relation": "",
-            "authorization_number": ""
+            "authorization_number": null
         },
         "insurance_plan_two": null,
         "insurance_plan_three": null
     }
+    
+    EXAMPLE of what to look for in INSURANCE section:
+    - "Insurance Company Name: 1" followed by "COMMUNITY HLTH MP(CMX)" → insurance_name
+    - "Insured Name:" followed by "patient name" → insured_name  
+    - "Relationship to Patient: SELF" → insured_relation
+    - "Group Number:" followed by "0000" → group_number
+    - "Insurance Company Phone #:" followed by "(123) 123-0432" → insurance_phone_number
+    - "Mail claim to:" followed by address → insurance_address
+    - "Policy Number:" → policy_number
+    - "Authorization Number:" → authorization_number
     
     Return ONLY the JSON - no explanations or markdown formatting.
     """

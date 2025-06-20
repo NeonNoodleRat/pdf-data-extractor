@@ -6,6 +6,8 @@
 
 *.pdf
 
+*.png
+
 # Ignore specific folders
 json_output/
 images/
