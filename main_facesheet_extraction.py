@@ -9,14 +9,14 @@ from pydantic import BaseModel
 from typing import List, Optional
 import time
 
-# Configuration
-SOURCE_FOLDER = "/home/shared/facesheet_documents"
+# Configuration - Updated for your test setup
+SOURCE_FOLDER = "facesheet_pdfs"  # Your new test folder
 CHECKPOINT_FILE = "processed_facesheets.json"
 OUTPUT_FOLDER = "facesheet_json_output"
 IMAGES_FOLDER = "facesheet_images"
 model_name = "gemma3:27b"
 
-# Pydantic Models based on FacesheetObject.cs
+# Updated Pydantic Models - FLATTENED STRUCTURE
 class Address(BaseModel):
     line_one: Optional[str] = None
     line_two: Optional[str] = None
@@ -25,7 +25,7 @@ class Address(BaseModel):
     zip: Optional[str] = None
 
 class PatientInformation(BaseModel):
-    account_number: Optional[str] = None
+    # Removed account_number - now at top level only
     race: Optional[str] = None
     ssn: Optional[str] = None
     encrypted_ssn: Optional[str] = None
@@ -69,7 +69,11 @@ class InsurancePlan(BaseModel):
     insured_relation: Optional[str] = None
     authorization_number: Optional[str] = None
 
-class MissingFacesheetPdfInformation(BaseModel):
+# Flattened FacesheetObject - merged facesheet_text and pdf_information
+class FacesheetObject(BaseModel):
+    # Top-level fields (formerly from facesheet_text and pdf_information)
+    date: Optional[str] = None
+    display_date: Optional[str] = None
     gender: Optional[str] = None
     date_of_birth: Optional[str] = None
     admit_date_time: Optional[str] = None
@@ -79,19 +83,15 @@ class MissingFacesheetPdfInformation(BaseModel):
     visit_number: Optional[str] = None
     location_name: Optional[str] = None
     referring_physician: Optional[str] = None
-
-class FacesheetText(BaseModel):
-    date: Optional[str] = None
-    display_date: Optional[str] = None
+    
+    # Nested information objects
     patient_information: Optional[PatientInformation] = None
     guarantor_information: Optional[GuarantorInformation] = None
     insurance_plan_one: Optional[InsurancePlan] = None
     insurance_plan_two: Optional[InsurancePlan] = None
     insurance_plan_three: Optional[InsurancePlan] = None
-
-class FacesheetObject(BaseModel):
-    facesheet_text: Optional[FacesheetText] = None
-    pdf_information: Optional[MissingFacesheetPdfInformation] = None
+    
+    # Processing metadata
     processed_timestamp: Optional[str] = None
     source_filename: Optional[str] = None
 
@@ -145,30 +145,32 @@ def convert_pdf_to_images(pdf_path, output_folder=IMAGES_FOLDER):
 def extract_facesheet_data(image_paths, debug=False):
     """
     Extract comprehensive facesheet data from all page images using Ollama.
-    Returns extracted data as a dictionary.
+    Returns extracted data as a dictionary with FLATTENED structure.
     """
     if debug:
         print(f"Processing {len(image_paths)} facesheet images")
         print("=" * 60)
 
-    # Prepare comprehensive extraction prompt
+    # Updated extraction prompt for FLATTENED structure
     extraction_prompt = """
     Looking at this facesheet document, please extract ALL available information and format it as JSON.
+    
+    CRITICAL: If SSN is redacted (shows *** or XXX), set it to null.
+    CRITICAL: If any field is not clearly visible, use null (not empty string).
     
     Extract the following comprehensive information:
     
     PATIENT INFORMATION:
-    - Full name, account number, medical record number, visit number
-    - Date of birth, gender, race, marital status
-    - SSN (if visible), bed/room number
+    - Race, marital status, veteran status  
+    - SSN (null if redacted), bed/room number
     - Home address (street, city, state, zip)
     - Phone numbers (home, business/work)
     - Primary language, county code
-    - Mother's maiden name, alias, veteran status
+    - Mother's maiden name, alias
     - Driver's license number
     
     GUARANTOR INFORMATION:
-    - Guarantor name, phone, SSN
+    - Guarantor name, phone, SSN (null if redacted)
     - Guarantor address
     - Emergency contact information (name, phone, relation)
     - Employer information (name, phone, address)
@@ -179,17 +181,27 @@ def extract_facesheet_data(image_paths, debug=False):
     - Insured person's name, DOB, address, relation to patient
     - Authorization numbers
     
-    ADMISSION/VISIT INFORMATION:
+    TOP LEVEL INFORMATION:
+    - Patient gender, date of birth
+    - Account number, medical record number, visit number
     - Admit date/time, room/bed assignment
-    - Attending/referring physician
-    - Location/department name
+    - Attending/referring physician, location/department name
     
-    Format as JSON with this structure:
+    Format as JSON with this FLATTENED structure (note: account_number at TOP level only):
     {
+        "gender": "",
+        "date_of_birth": "",
+        "admit_date_time": "",
+        "room": "",
+        "medical_record_number": "",
+        "account_number": "",
+        "visit_number": "",
+        "location_name": "",
+        "referring_physician": "",
         "patient_information": {
-            "account_number": "",
             "race": "",
-            "ssn": "",
+            "ssn": null,
+            "encrypted_ssn": "",
             "bed": "",
             "mothers_maiden_name": "",
             "alias": "",
@@ -211,7 +223,8 @@ def extract_facesheet_data(image_paths, debug=False):
         "guarantor_information": {
             "name": "",
             "phone": "",
-            "ssn": "",
+            "ssn": null,
+            "encrypted_ssn": "",
             "address": {
                 "line_one": "",
                 "line_two": "",
@@ -258,22 +271,11 @@ def extract_facesheet_data(image_paths, debug=False):
             "insured_relation": "",
             "authorization_number": ""
         },
-        "insurance_plan_two": { /* same structure */ },
-        "insurance_plan_three": { /* same structure */ },
-        "pdf_information": {
-            "gender": "",
-            "date_of_birth": "",
-            "admit_date_time": "",
-            "room": "",
-            "medical_record_number": "",
-            "account_number": "",
-            "visit_number": "",
-            "location_name": "",
-            "referring_physician": ""
-        }
+        "insurance_plan_two": null,
+        "insurance_plan_three": null
     }
     
-    If any field is not clearly visible or not present, use null. Only extract what you can clearly read.
+    Return ONLY the JSON - no explanations or markdown formatting.
     """
 
     try:
@@ -333,7 +335,7 @@ def extract_facesheet_data(image_paths, debug=False):
 
 def process_facesheet_pdf(pdf_path, output_folder, debug=False):
     """
-    Process a single facesheet PDF and save results as JSON.
+    Process a single facesheet PDF and save results as JSON with FLATTENED structure.
     """
     filename = os.path.basename(pdf_path)
     base_name = os.path.splitext(filename)[0]
@@ -354,25 +356,38 @@ def process_facesheet_pdf(pdf_path, output_folder, debug=False):
             print("  ❌ ERROR: Failed to extract facesheet data")
             return False
 
-        # Create FacesheetObject
+        # Create FacesheetObject with FLATTENED structure
+        today = datetime.now()
+        
         facesheet_obj = FacesheetObject(
-            facesheet_text=FacesheetText(
-                date=datetime.now().strftime("%Y-%m-%d"),
-                display_date=datetime.now().strftime("%m/%d/%Y"),
-                patient_information=PatientInformation(**extracted_data.get("patient_information", {})) if extracted_data.get("patient_information") else None,
-                guarantor_information=GuarantorInformation(**extracted_data.get("guarantor_information", {})) if extracted_data.get("guarantor_information") else None,
-                insurance_plan_one=InsurancePlan(**extracted_data.get("insurance_plan_one", {})) if extracted_data.get("insurance_plan_one") else None,
-                insurance_plan_two=InsurancePlan(**extracted_data.get("insurance_plan_two", {})) if extracted_data.get("insurance_plan_two") else None,
-                insurance_plan_three=InsurancePlan(**extracted_data.get("insurance_plan_three", {})) if extracted_data.get("insurance_plan_three") else None,
-            ),
-            pdf_information=MissingFacesheetPdfInformation(**extracted_data.get("pdf_information", {})) if extracted_data.get("pdf_information") else None,
+            # Top-level fields (flattened)
+            date=today.strftime("%Y-%m-%d"),
+            display_date=today.strftime("%m/%d/%Y"),
+            gender=extracted_data.get("gender"),
+            date_of_birth=extracted_data.get("date_of_birth"),
+            admit_date_time=extracted_data.get("admit_date_time"),
+            room=extracted_data.get("room"),
+            medical_record_number=extracted_data.get("medical_record_number"),
+            account_number=extracted_data.get("account_number"),
+            visit_number=extracted_data.get("visit_number"),
+            location_name=extracted_data.get("location_name"),
+            referring_physician=extracted_data.get("referring_physician"),
+            
+            # Nested information objects
+            patient_information=PatientInformation(**extracted_data.get("patient_information", {})) if extracted_data.get("patient_information") else None,
+            guarantor_information=GuarantorInformation(**extracted_data.get("guarantor_information", {})) if extracted_data.get("guarantor_information") else None,
+            insurance_plan_one=InsurancePlan(**extracted_data.get("insurance_plan_one", {})) if extracted_data.get("insurance_plan_one") else None,
+            insurance_plan_two=InsurancePlan(**extracted_data.get("insurance_plan_two", {})) if extracted_data.get("insurance_plan_two") else None,
+            insurance_plan_three=InsurancePlan(**extracted_data.get("insurance_plan_three", {})) if extracted_data.get("insurance_plan_three") else None,
+            
+            # Processing metadata
             processed_timestamp=datetime.now().isoformat(),
             source_filename=filename
         )
 
-        # Save as JSON
+        # Save as JSON with proper null handling
         with open(output_json_path, 'w') as f:
-            json.dump(facesheet_obj.model_dump(), f, indent=2, default=str)
+            json.dump(facesheet_obj.model_dump(exclude_none=False), f, indent=2, default=str)
 
         print(f"  ✅ SUCCESS: Saved to {output_json_path}")
         return True
@@ -404,6 +419,12 @@ def main():
     # Load checkpoint
     processed = load_checkpoint()
 
+    # Check if source folder exists
+    if not os.path.exists(SOURCE_FOLDER):
+        print(f"❌ Source folder '{SOURCE_FOLDER}' not found!")
+        print(f"Please create the folder and add your facesheet PDFs there.")
+        return
+
     # Fetch list of all PDFs in source folder
     all_pdfs = [
         fname for fname in os.listdir(SOURCE_FOLDER)
@@ -414,7 +435,11 @@ def main():
     to_process = [f for f in all_pdfs if f not in processed]
 
     if not to_process:
-        print("No unprocessed facesheet PDF files found in the source folder.")
+        if not all_pdfs:
+            print(f"No PDF files found in '{SOURCE_FOLDER}' folder.")
+            print("Please add your facesheet PDFs to test with.")
+        else:
+            print("All facesheet PDF files have already been processed.")
         return
 
     print(f"Found {len(all_pdfs)} total PDFs, {len(to_process)} to process")
@@ -430,7 +455,7 @@ def main():
         pdf_path = os.path.join(SOURCE_FOLDER, filename)
 
         try:
-            success = process_facesheet_pdf(pdf_path, OUTPUT_FOLDER, debug=False)
+            success = process_facesheet_pdf(pdf_path, OUTPUT_FOLDER, debug=True)  # Enable debug for testing
             
             if success:
                 successful_count += 1
@@ -441,8 +466,8 @@ def main():
             processed.add(filename)
             save_checkpoint(processed)
 
-            # Progress update every 10 files
-            if successful_count % 10 == 0 and successful_count > 0:
+            # Progress update every 5 files (lower for testing)
+            if successful_count % 5 == 0 and successful_count > 0:
                 elapsed = datetime.now() - start_time
                 avg_time = elapsed.total_seconds() / (successful_count + error_count)
                 remaining = len(to_process) - idx
@@ -469,12 +494,13 @@ def main():
     print("="*50)
 
 if __name__ == "__main__":
-    print("Facesheet PDF Data Extractor v1.0")
+    print("Updated Facesheet PDF Data Extractor v2.0")
     print("=" * 60)
     print(f"Source folder: {SOURCE_FOLDER}")
     print(f"Checkpoint file: {CHECKPOINT_FILE}")
     print(f"Output folder: {OUTPUT_FOLDER}")
     print(f"Images temporary folder: {IMAGES_FOLDER}")
+    print("🔧 UPDATES: Flattened structure + single account_number + SSN handling")
     print("=" * 60)
     
     # Add command line options
