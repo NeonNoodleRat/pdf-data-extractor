@@ -154,18 +154,28 @@ def extract_facesheet_data(image_paths, debug=False):
 
     # First pass: Get raw insurance text for debugging
     debug_prompt = """
-    Look at this facesheet document and find the INSURANCE INFORMATION section.
+    Look at this facesheet document and find these sections:
     
-    Please extract and list ALL text you can see in the insurance section, line by line.
-    Include any labels, numbers, addresses, phone numbers, etc.
+    1. HEADER/TOP SECTION - Look for any text that contains "MRN:" or "Medical Record Number"
+    2. INSURANCE INFORMATION section
+    3. GUARANTOR section (might be labeled as "Guarantor", "Responsible Party", "Emergency Contact", etc.)
+    
+    Please extract and list ALL text you can see in each section, line by line.
     
     Format like this:
+    HEADER/MRN SECTION:
+    - Line 1 text here
+    - Line 2 text here
+    
     INSURANCE SECTION TEXT:
     - Line 1 text here
     - Line 2 text here
-    - etc.
     
-    If you cannot find an insurance section, say "NO INSURANCE SECTION FOUND"
+    GUARANTOR SECTION TEXT:
+    - Line 1 text here
+    - Line 2 text here
+    
+    If you cannot find a section, say "SECTION NOT FOUND"
     """
 
     if debug:
@@ -209,11 +219,34 @@ def extract_facesheet_data(image_paths, debug=False):
     - "TX" goes in state
     - "79988-1899" goes in zip
     
-    FOR OTHER FIELDS:
-    - Look for patient name after "Patient Name:" label
-    - Look for race after "Race:" label 
-    - Account numbers may be long (10+ digits) - extract the full number
-    - Medical Record Number: look for "MRN:" - if not found, use null
+    FOR MRN EXTRACTION:
+    - Look in the header/top section for "MRN:" followed by a number
+    - Extract the number that comes after "MRN:" as medical_record_number
+    
+    FOR INSURANCE SECTION - I can see these exact labels in your document:
+    - "ACO Type:" followed by insurance name → insurance_name
+    - "Insurance Information to Patient: SELF" → insured_relation: "SELF"  
+    - "Group Number:" followed by actual number → group_number
+    - "Insurance Company Phone #:" followed by phone → insurance_phone_number
+    - "Mail claim to:" followed by "PO BOX [number]" → insurance_address line_one
+    - "El Paso, TX 79988-1899" (the line after Mail claim to) → insurance_address city, state, zip
+    
+    ALSO extract from this alternative insurance format I see:
+    - "Insurance:" followed by insurance name → insurance_name
+    - "Policy:" followed by policy number → policy_number  
+    - "Group:" followed by group number → group_number
+    - "Authorization:" followed by auth number → authorization_number
+    
+    FOR GUARANTOR SECTION - I can see these exact labels:
+    - "Guarantor:" followed by name → guarantor name
+    - "Address:" followed by address → guarantor address line_one
+    - "City:" followed by city → guarantor address city
+    - "Phone:" followed by phone → guarantor phone
+    
+    Split the guarantor address properly:
+    - "Address:" value goes in guarantor address line_one
+    - "City:" value goes in guarantor address city  
+    - Look for state and zip in the city line or separate fields
     
     Format as JSON with this FLATTENED structure:
     {
@@ -221,7 +254,7 @@ def extract_facesheet_data(image_paths, debug=False):
         "date_of_birth": "",
         "admit_date_time": "",
         "room": "",
-        "medical_record_number": null,
+        "medical_record_number": "extract from MRN: label in header",
         "account_number": "",
         "visit_number": "",
         "location_name": "",
@@ -250,16 +283,16 @@ def extract_facesheet_data(image_paths, debug=False):
             "drivers_license_number": null
         },
         "guarantor_information": {
-            "name": "",
-            "phone": "",
+            "name": "extract from Guarantor: label",
+            "phone": "extract from Phone: label in guarantor section",
             "ssn": null,
             "encrypted_ssn": null,
             "address": {
-                "line_one": "",
+                "line_one": "extract from Address: label in guarantor section",
                 "line_two": null,
-                "city": "",
-                "state": "",
-                "zip": ""
+                "city": "extract from City: label in guarantor section",
+                "state": "extract state from city line or separate field",
+                "zip": "extract zip from city line or separate field"
             },
             "contact_name": null,
             "contact_phone": null,
