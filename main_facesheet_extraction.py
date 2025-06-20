@@ -184,16 +184,37 @@ def extract_facesheet_data(image_paths, debug=False):
     - Employer information (name, phone, address)
     
     INSURANCE INFORMATION (look for sections like "INSURANCE INFORMATION"):
-    - Insurance company name (like "COMMUNITY HLTH MP(CMX)")
-    - Policy number, group number, group name
-    - Insurance company phone number
-    - Insurance company address (mailing address)
-    - Insured name (may say "patient name" or actual name)
-    - Insured date of birth
-    - Insured address
-    - Relationship to patient (like "SELF")
-    - Authorization number
-    - Plan ID or certificate number
+    CRITICAL: Look for these EXACT labels - be very careful with spacing and punctuation:
+    
+    FOR PHONE NUMBER - Look for ANY of these variations:
+    - "Insurance Company Phone #:"
+    - "Insurance Company Phone:"  
+    - "Phone #:"
+    - "Phone:"
+    - Any phone number in format like "(123) 123-0432" near insurance section
+    
+    FOR INSURANCE ADDRESS - Look for ANY of these variations:
+    - "Mail claim to:"
+    - "Mail claims to:"
+    - "Address:"
+    - "Mailing Address:"
+    - Look for full address with city, state, zip near insurance section
+    
+    FOR POLICY NUMBER - Look for ANY of these variations:
+    - "Policy Number:"
+    - "Policy #:"
+    - "Member ID:"
+    - "ID Number:"
+    
+    OTHER INSURANCE FIELDS:
+    - "Insurance Company Name:" → insurance_name (like "COMMUNITY HLTH MP(CMX)")
+    - "Group Number:" → group_number (extract the actual number)
+    - "Insured Name:" → insured_name
+    - "Relationship to Patient:" → insured_relation (like "SELF")
+    - "Authorization Number:" → authorization_number
+    - "Insured SSN or Certificate #:" → plan_id (ONLY if this exact label exists)
+    
+    DEBUGGING: If you cannot find insurance phone or address, include in your response what insurance-related text you DO see.
     
     TOP LEVEL INFORMATION:
     - Patient gender, date of birth
@@ -257,21 +278,21 @@ def extract_facesheet_data(image_paths, debug=False):
             "employer_address": null
         },
         "insurance_plan_one": {
-            "plan_id": "",
-            "policy_number": "",
-            "group_number": "",
+            "plan_id": null,
+            "policy_number": null,
+            "group_number": null,
             "group_name": null,
-            "insurance_name": "",
+            "insurance_name": null,
             "insurance_company_id": null,
-            "insurance_phone_number": "",
+            "insurance_phone_number": null,
             "insurance_address": {
-                "line_one": "",
+                "line_one": null,
                 "line_two": null,
-                "city": "",
-                "state": "",
-                "zip": ""
+                "city": null,
+                "state": null,
+                "zip": null
             },
-            "insured_name": "",
+            "insured_name": null,
             "insured_dob": null,
             "insured_address": {
                 "line_one": null,
@@ -280,7 +301,7 @@ def extract_facesheet_data(image_paths, debug=False):
                 "state": null,
                 "zip": null
             },
-            "insured_relation": "",
+            "insured_relation": null,
             "authorization_number": null
         },
         "insurance_plan_two": null,
@@ -288,14 +309,22 @@ def extract_facesheet_data(image_paths, debug=False):
     }
     
     EXAMPLE of what to look for in INSURANCE section:
-    - "Insurance Company Name: 1" followed by "COMMUNITY HLTH MP(CMX)" → insurance_name
-    - "Insured Name:" followed by "patient name" → insured_name  
-    - "Relationship to Patient: SELF" → insured_relation
-    - "Group Number:" followed by "0000" → group_number
-    - "Insurance Company Phone #:" followed by "(123) 123-0432" → insurance_phone_number
-    - "Mail claim to:" followed by address → insurance_address
-    - "Policy Number:" → policy_number
-    - "Authorization Number:" → authorization_number
+    - "Insurance Company Name: 1" followed by "COMMUNITY HLTH MP(CMX)" → insurance_name: "COMMUNITY HLTH MP(CMX)"
+    - "Insured Name:" followed by "patient name" → insured_name: "patient name"  
+    - "Relationship to Patient: SELF" → insured_relation: "SELF"
+    - "Group Number:" followed by "0000" → group_number: "0000" (extract actual number, not placeholder)
+    - "Insurance Company Phone #:" followed by "(123) 123-0432" → insurance_phone_number: "(123) 123-0432"
+    - "Mail claim to:" followed by address lines → insurance_address
+    - "Policy Number:" followed by "12345" → policy_number: "12345" (your example shows 12345)
+    - "Authorization Number:" followed by actual number → authorization_number
+    - "Insured SSN or Certificate #:" followed by number → plan_id (ONLY if this label exists)
+    
+    CRITICAL: 
+    - If you see "Policy Number:" label, extract what follows it
+    - If you see "Group Number:" label, extract what follows it (should NOT be "0000" unless that's the actual value)
+    - If you see "Insurance Company Phone #:" label, extract the phone number that follows
+    - If you see "Mail claim to:" extract the full address block that follows
+    - DO NOT extract random numbers - only extract numbers that follow the correct labels
     
     Return ONLY the JSON - no explanations or markdown formatting.
     """
@@ -477,7 +506,7 @@ def main():
         pdf_path = os.path.join(SOURCE_FOLDER, filename)
 
         try:
-            success = process_facesheet_pdf(pdf_path, OUTPUT_FOLDER, debug=True)  # Enable debug for testing
+            success = process_facesheet_pdf(pdf_path, OUTPUT_FOLDER, debug=True)  # Keep debug enabled for troubleshooting
             
             if success:
                 successful_count += 1
