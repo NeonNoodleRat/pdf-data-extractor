@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import random
 
-# Import the same Pydantic models from your main script
+# Flattened Pydantic models based on Person 1's feedback
 class Address(BaseModel):
     line_one: Optional[str] = None
     line_two: Optional[str] = None
@@ -16,7 +16,7 @@ class Address(BaseModel):
 class PatientInformation(BaseModel):
     account_number: Optional[str] = None
     race: Optional[str] = None
-    ssn: Optional[str] = None
+    ssn: Optional[str] = None  # Will be null if redacted
     encrypted_ssn: Optional[str] = None
     bed: Optional[str] = None
     mothers_maiden_name: Optional[str] = None
@@ -33,7 +33,7 @@ class PatientInformation(BaseModel):
 class GuarantorInformation(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
-    ssn: Optional[str] = None
+    ssn: Optional[str] = None  # Will be null if redacted
     encrypted_ssn: Optional[str] = None
     address: Optional[Address] = None
     contact_name: Optional[str] = None
@@ -58,7 +58,11 @@ class InsurancePlan(BaseModel):
     insured_relation: Optional[str] = None
     authorization_number: Optional[str] = None
 
-class MissingFacesheetPdfInformation(BaseModel):
+# Flattened FacesheetObject - merged facesheet_text and pdf_information
+class FacesheetObject(BaseModel):
+    # Top-level fields (formerly from facesheet_text and pdf_information)
+    date: Optional[str] = None
+    display_date: Optional[str] = None
     gender: Optional[str] = None
     date_of_birth: Optional[str] = None
     admit_date_time: Optional[str] = None
@@ -68,19 +72,15 @@ class MissingFacesheetPdfInformation(BaseModel):
     visit_number: Optional[str] = None
     location_name: Optional[str] = None
     referring_physician: Optional[str] = None
-
-class FacesheetText(BaseModel):
-    date: Optional[str] = None
-    display_date: Optional[str] = None
+    
+    # Nested information objects
     patient_information: Optional[PatientInformation] = None
     guarantor_information: Optional[GuarantorInformation] = None
     insurance_plan_one: Optional[InsurancePlan] = None
     insurance_plan_two: Optional[InsurancePlan] = None
     insurance_plan_three: Optional[InsurancePlan] = None
-
-class FacesheetObject(BaseModel):
-    facesheet_text: Optional[FacesheetText] = None
-    pdf_information: Optional[MissingFacesheetPdfInformation] = None
+    
+    # Processing metadata
     processed_timestamp: Optional[str] = None
     source_filename: Optional[str] = None
 
@@ -111,11 +111,14 @@ def generate_fake_patient_info():
     marital_statuses = ["Single", "Married", "Divorced", "Widowed", "Separated"]
     languages = ["English", "Spanish", "French", "Other"]
     
+    # SSN handling: null if redacted (per Person 1's request)
+    ssn_redacted = random.choice([True, False, False])  # 33% chance of redaction
+    
     return PatientInformation(
         account_number=f"ACC{random.randint(100000, 999999)}",
         race=random.choice(races),
-        ssn="***-**-****",  # Always masked
-        encrypted_ssn="ENCRYPTED_SSN_HASH_12345",
+        ssn=None if ssn_redacted else f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}",
+        encrypted_ssn="ENCRYPTED_SSN_HASH_12345" if not ssn_redacted else None,
         bed=f"{random.randint(100, 500)}{random.choice(['A', 'B'])}",
         mothers_maiden_name="Smith" if random.choice([True, False]) else None,
         alias=None,
@@ -134,11 +137,14 @@ def generate_fake_guarantor_info():
     employers = ["ABC Corporation", "XYZ Industries", "Healthcare Partners", "Tech Solutions Inc", "Retail Group LLC"]
     relations = ["Self", "Spouse", "Parent", "Child", "Other"]
     
+    # SSN handling: null if redacted
+    ssn_redacted = random.choice([True, False])
+    
     return GuarantorInformation(
         name="John Smith" if random.choice([True, False]) else "Self",
         phone=generate_phone_number(),
-        ssn="***-**-****",
-        encrypted_ssn="ENCRYPTED_GUARANTOR_SSN_67890",
+        ssn=None if ssn_redacted else f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}",
+        encrypted_ssn="ENCRYPTED_GUARANTOR_SSN_67890" if not ssn_redacted else None,
         address=generate_fake_address(),
         contact_name="Emergency Contact Name",
         contact_phone=generate_phone_number(),
@@ -178,15 +184,19 @@ def generate_fake_insurance_plan(plan_type="Primary"):
         authorization_number=f"AUTH{random.randint(100000, 999999)}" if random.choice([True, False]) else None
     )
 
-def generate_fake_pdf_info():
-    """Generate fake PDF information"""
+def generate_complete_facesheet():
+    """Generate a complete fake facesheet object with flattened structure"""
+    today = datetime.now()
     genders = ["Male", "Female", "Other"]
     locations = ["Emergency Department", "Medical/Surgical Unit", "ICU", "Outpatient", "Observation"]
     physicians = ["Dr. Johnson", "Dr. Williams", "Dr. Brown", "Dr. Davis", "Dr. Miller"]
     
     admit_date = datetime.now().strftime("%m/%d/%Y %H:%M")
     
-    return MissingFacesheetPdfInformation(
+    return FacesheetObject(
+        # Top-level fields (flattened from nested objects)
+        date=today.strftime("%Y-%m-%d"),
+        display_date=today.strftime("%m/%d/%Y"),
         gender=random.choice(genders),
         date_of_birth="01/15/1980",
         admit_date_time=admit_date,
@@ -195,26 +205,16 @@ def generate_fake_pdf_info():
         account_number=f"ACC{random.randint(100000, 999999)}",
         visit_number=f"VIS{random.randint(100000, 999999)}",
         location_name=random.choice(locations),
-        referring_physician=random.choice(physicians)
-    )
-
-def generate_complete_facesheet():
-    """Generate a complete fake facesheet object"""
-    today = datetime.now()
-    
-    facesheet_text = FacesheetText(
-        date=today.strftime("%Y-%m-%d"),
-        display_date=today.strftime("%m/%d/%Y"),
+        referring_physician=random.choice(physicians),
+        
+        # Nested information objects
         patient_information=generate_fake_patient_info(),
         guarantor_information=generate_fake_guarantor_info(),
         insurance_plan_one=generate_fake_insurance_plan("Primary"),
         insurance_plan_two=generate_fake_insurance_plan("Secondary") if random.choice([True, False]) else None,
-        insurance_plan_three=generate_fake_insurance_plan("Tertiary") if random.choice([True, False, False]) else None
-    )
-    
-    return FacesheetObject(
-        facesheet_text=facesheet_text,
-        pdf_information=generate_fake_pdf_info(),
+        insurance_plan_three=generate_fake_insurance_plan("Tertiary") if random.choice([True, False, False]) else None,
+        
+        # Processing metadata
         processed_timestamp=datetime.now().isoformat(),
         source_filename="test_facesheet_fake_data.pdf"
     )
@@ -229,11 +229,12 @@ def generate_multiple_facesheets(count=5):
 
 def save_test_data():
     """Generate and save test data files"""
-    output_folder = "test_facesheet_data"
+    output_folder = "test_facesheet_data_v2"
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     
-    print("🏥 Generating fake facesheet test data...")
+    print("🏥 Generating UPDATED fake facesheet test data...")
+    print("📋 Changes: Flattened structure + null SSN handling")
     print("=" * 50)
     
     # Generate single facesheet
@@ -241,7 +242,7 @@ def save_test_data():
     single_path = os.path.join(output_folder, "sample_facesheet.json")
     
     with open(single_path, 'w') as f:
-        json.dump(single_facesheet.model_dump(), f, indent=2, default=str)
+        json.dump(single_facesheet.model_dump(exclude_none=False), f, indent=2, default=str)
     
     print(f"✅ Single facesheet saved: {single_path}")
     
@@ -249,7 +250,7 @@ def save_test_data():
     multiple_facesheets = generate_multiple_facesheets(5)
     multiple_path = os.path.join(output_folder, "multiple_facesheets.json")
     
-    facesheets_data = [fs.model_dump() for fs in multiple_facesheets]
+    facesheets_data = [fs.model_dump(exclude_none=False) for fs in multiple_facesheets]
     with open(multiple_path, 'w') as f:
         json.dump(facesheets_data, f, indent=2, default=str)
     
@@ -264,63 +265,82 @@ def save_test_data():
     
     print(f"✅ JSON schema saved: {schema_path}")
     
-    # Generate a "realistic" incomplete example (some fields missing)
+    # Generate a "realistic" incomplete example with redacted SSN
     incomplete_facesheet = generate_complete_facesheet()
-    incomplete_facesheet.facesheet_text.insurance_plan_two = None
-    incomplete_facesheet.facesheet_text.insurance_plan_three = None
-    incomplete_facesheet.facesheet_text.patient_information.business_phone = None
-    incomplete_facesheet.facesheet_text.guarantor_information.employer_address = None
+    incomplete_facesheet.insurance_plan_two = None
+    incomplete_facesheet.insurance_plan_three = None
+    incomplete_facesheet.patient_information.business_phone = None
+    incomplete_facesheet.patient_information.ssn = None  # Redacted SSN
+    incomplete_facesheet.guarantor_information.ssn = None  # Redacted SSN
+    incomplete_facesheet.guarantor_information.employer_address = None
     
     incomplete_path = os.path.join(output_folder, "incomplete_facesheet.json")
     with open(incomplete_path, 'w') as f:
-        json.dump(incomplete_facesheet.model_dump(), f, indent=2, default=str)
+        json.dump(incomplete_facesheet.model_dump(exclude_none=False), f, indent=2, default=str)
     
     print(f"✅ Incomplete example saved: {incomplete_path}")
     
     print("\n" + "=" * 50)
-    print("📋 SUMMARY FOR PERSON 1:")
+    print("📋 UPDATED SUMMARY FOR PERSON 1:")
     print("=" * 50)
     print(f"Test data generated in: {output_folder}/")
     print("Files created:")
-    print("  • sample_facesheet.json - Single complete example")
+    print("  • sample_facesheet.json - Single complete example (FLATTENED)")
     print("  • multiple_facesheets.json - Array of 5 examples") 
-    print("  • incomplete_facesheet.json - Realistic example with missing fields")
-    print("  • facesheet_schema.json - JSON schema for validation")
+    print("  • incomplete_facesheet.json - Example with redacted SSNs + missing fields")
+    print("  • facesheet_schema.json - Updated JSON schema")
+    print("\n🔧 CHANGES MADE:")
+    print("  ✅ Flattened structure - date, gender, etc. at top level")
+    print("  ✅ SSN handling - null when redacted (not '***-**-****')")
     print("\n💡 Use 'sample_facesheet.json' for initial testing!")
 
 def preview_sample():
-    """Show a preview of what the data looks like"""
+    """Show a preview of what the flattened data looks like"""
     sample = generate_complete_facesheet()
-    print("📋 SAMPLE FACESHEET DATA PREVIEW:")
+    print("📋 SAMPLE FLATTENED FACESHEET DATA PREVIEW:")
     print("=" * 60)
     
-    # Show key fields for quick review
-    patient = sample.facesheet_text.patient_information
-    pdf_info = sample.pdf_information
-    insurance = sample.facesheet_text.insurance_plan_one
+    # Show the flattened structure
+    print(f"🔝 TOP LEVEL FIELDS:")
+    print(f"   Date: {sample.date}")
+    print(f"   Display Date: {sample.display_date}")
+    print(f"   Gender: {sample.gender}")
+    print(f"   DOB: {sample.date_of_birth}")
+    print(f"   Account: {sample.account_number}")
+    print(f"   MRN: {sample.medical_record_number}")
+    print(f"   Room: {sample.room}")
+    print(f"   Physician: {sample.referring_physician}")
     
-    print(f"Patient Account: {patient.account_number}")
-    print(f"DOB: {pdf_info.date_of_birth}")
-    print(f"Gender: {pdf_info.gender}")
-    print(f"Address: {patient.address.line_one}, {patient.address.city}, {patient.address.state}")
-    print(f"Phone: {patient.home_phone}")
-    print(f"Insurance: {insurance.insurance_name}")
-    print(f"Policy: {insurance.policy_number}")
-    print(f"Room: {pdf_info.room}")
-    print(f"Physician: {pdf_info.referring_physician}")
+    print(f"\n📋 NESTED OBJECTS:")
+    patient = sample.patient_information
+    insurance = sample.insurance_plan_one
+    print(f"   Patient Address: {patient.address.line_one}, {patient.address.city}")
+    print(f"   Patient Phone: {patient.home_phone}")
+    print(f"   Patient SSN: {patient.ssn if patient.ssn else 'null (redacted)'}")
+    print(f"   Insurance: {insurance.insurance_name}")
+    print(f"   Policy: {insurance.policy_number}")
+    
+    print(f"\n📁 METADATA:")
+    print(f"   Timestamp: {sample.processed_timestamp}")
+    print(f"   Source: {sample.source_filename}")
     
     print("\n🔍 This is fake data - safe for testing!")
+    print("🔧 Notice: Flattened structure + proper null handling!")
 
 if __name__ == "__main__":
-    print("🏥 FACESHEET TEST DATA GENERATOR")
+    print("🏥 UPDATED FACESHEET TEST DATA GENERATOR")
+    print("=" * 60)
+    print("🔧 UPDATED based on Person 1's feedback:")
+    print("   1. Flattened structure (merged facesheet_text + pdf_information)")
+    print("   2. Proper SSN handling (null when redacted)")
     print("=" * 60)
     print("This script generates realistic fake facesheet data for testing.")
     print("All data is completely fictional and safe for development/testing.")
     print("=" * 60)
     
     print("\nOptions:")
-    print("1. Generate test files")
-    print("2. Preview sample data")
+    print("1. Generate updated test files")
+    print("2. Preview flattened sample data")
     print("3. Both")
     
     choice = input("\nEnter choice (1-3): ").strip()
