@@ -14,7 +14,7 @@ class Address(BaseModel):
     zip: Optional[str] = None
 
 class PatientInformation(BaseModel):
-    account_number: Optional[str] = None
+    # Removed account_number - now at top level only
     race: Optional[str] = None
     ssn: Optional[str] = None  # Will be null if redacted
     encrypted_ssn: Optional[str] = None
@@ -105,8 +105,8 @@ def generate_phone_number():
     number = random.randint(1000, 9999)
     return f"({area_code}) {exchange}-{number}"
 
-def generate_fake_patient_info():
-    """Generate fake patient information"""
+def generate_fake_patient_info(account_number):
+    """Generate fake patient information (account_number removed - now at top level)"""
     races = ["Caucasian", "African American", "Hispanic", "Asian", "Other", "Declined"]
     marital_statuses = ["Single", "Married", "Divorced", "Widowed", "Separated"]
     languages = ["English", "Spanish", "French", "Other"]
@@ -115,7 +115,7 @@ def generate_fake_patient_info():
     ssn_redacted = random.choice([True, False, False])  # 33% chance of redaction
     
     return PatientInformation(
-        account_number=f"ACC{random.randint(100000, 999999)}",
+        # account_number removed - now at top level
         race=random.choice(races),
         ssn=None if ssn_redacted else f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}",
         encrypted_ssn="ENCRYPTED_SSN_HASH_12345" if not ssn_redacted else None,
@@ -193,6 +193,9 @@ def generate_complete_facesheet():
     
     admit_date = datetime.now().strftime("%m/%d/%Y %H:%M")
     
+    # Generate single account number to use consistently
+    account_number = f"ACC{random.randint(100000, 999999)}"
+    
     return FacesheetObject(
         # Top-level fields (flattened from nested objects)
         date=today.strftime("%Y-%m-%d"),
@@ -202,13 +205,13 @@ def generate_complete_facesheet():
         admit_date_time=admit_date,
         room=f"{random.randint(100, 500)}{random.choice(['A', 'B'])}",
         medical_record_number=f"MRN{random.randint(1000000, 9999999)}",
-        account_number=f"ACC{random.randint(100000, 999999)}",
+        account_number=account_number,  # Single source of truth
         visit_number=f"VIS{random.randint(100000, 999999)}",
         location_name=random.choice(locations),
         referring_physician=random.choice(physicians),
         
-        # Nested information objects
-        patient_information=generate_fake_patient_info(),
+        # Nested information objects (account_number removed from patient_information)
+        patient_information=generate_fake_patient_info(account_number),
         guarantor_information=generate_fake_guarantor_info(),
         insurance_plan_one=generate_fake_insurance_plan("Primary"),
         insurance_plan_two=generate_fake_insurance_plan("Secondary") if random.choice([True, False]) else None,
@@ -234,7 +237,7 @@ def save_test_data():
         os.makedirs(output_folder)
     
     print("🏥 Generating UPDATED fake facesheet test data...")
-    print("📋 Changes: Flattened structure + null SSN handling")
+    print("📋 Changes: Flattened structure + null SSN handling + single account number")
     print("=" * 50)
     
     # Generate single facesheet
@@ -292,6 +295,7 @@ def save_test_data():
     print("\n🔧 CHANGES MADE:")
     print("  ✅ Flattened structure - date, gender, etc. at top level")
     print("  ✅ SSN handling - null when redacted (not '***-**-****')")
+    print("  ✅ Single account_number - removed duplicate from patient_information")
     print("\n💡 Use 'sample_facesheet.json' for initial testing!")
 
 def preview_sample():
@@ -330,9 +334,10 @@ def preview_sample():
 if __name__ == "__main__":
     print("🏥 UPDATED FACESHEET TEST DATA GENERATOR")
     print("=" * 60)
-    print("🔧 UPDATED based on Person 1's feedback:")
+    print("🔧 UPDATED based on Person 1's feedback + C# structure review:")
     print("   1. Flattened structure (merged facesheet_text + pdf_information)")
     print("   2. Proper SSN handling (null when redacted)")
+    print("   3. Single account_number (removed duplicate from patient_information)")
     print("=" * 60)
     print("This script generates realistic fake facesheet data for testing.")
     print("All data is completely fictional and safe for development/testing.")
@@ -352,4 +357,5 @@ if __name__ == "__main__":
         print("\n")
         preview_sample()
     
-    print("\n✅ Done!")
+    print("\n✅ Done! Send the UPDATED JSON files to Person 1 for testing.")
+    print("💡 The structure is now flattened and SSN handling is improved!")
