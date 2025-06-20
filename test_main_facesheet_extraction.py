@@ -15,6 +15,7 @@ class Address(BaseModel):
 
 class PatientInformation(BaseModel):
     # Removed account_number - now at top level only
+    patient_name: Optional[str] = None  # Added patient name
     race: Optional[str] = None
     ssn: Optional[str] = None  # Will be null if redacted
     encrypted_ssn: Optional[str] = None
@@ -111,11 +112,17 @@ def generate_fake_patient_info(account_number):
     marital_statuses = ["Single", "Married", "Divorced", "Widowed", "Separated"]
     languages = ["English", "Spanish", "French", "Other"]
     
+    # Generate fake patient names
+    first_names = ["John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Lisa", "James", "Maria"]
+    last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"]
+    patient_name = f"{random.choice(first_names)} {random.choice(last_names)}"
+    
     # SSN handling: null if redacted (per Person 1's request)
     ssn_redacted = random.choice([True, False, False])  # 33% chance of redaction
     
     return PatientInformation(
         # account_number removed - now at top level
+        patient_name=patient_name,
         race=random.choice(races),
         ssn=None if ssn_redacted else f"{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}",
         encrypted_ssn="ENCRYPTED_SSN_HASH_12345" if not ssn_redacted else None,
@@ -318,6 +325,7 @@ def preview_sample():
     print(f"\n📋 NESTED OBJECTS:")
     patient = sample.patient_information
     insurance = sample.insurance_plan_one
+    print(f"   Patient Name: {patient.patient_name}")
     print(f"   Patient Address: {patient.address.line_one}, {patient.address.city}")
     print(f"   Patient Phone: {patient.home_phone}")
     print(f"   Patient SSN: {patient.ssn if patient.ssn else 'null (redacted)'}")
@@ -357,5 +365,4 @@ if __name__ == "__main__":
         print("\n")
         preview_sample()
     
-    print("\n✅ Done! Send the UPDATED JSON files to Person 1 for testing.")
-    print("💡 The structure is now flattened and SSN handling is improved!")
+    print("\n✅ Done!")
