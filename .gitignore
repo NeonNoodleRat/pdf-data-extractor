@@ -4,6 +4,8 @@
 # Ignore JSON files
 *.json
 
+*.pdf
+
 # Ignore specific folders
 json_output/
 images/
