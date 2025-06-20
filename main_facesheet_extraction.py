@@ -186,7 +186,7 @@ def extract_facesheet_data(image_paths, debug=False):
         except Exception as e:
             print(f"Debug extraction failed: {e}")
 
-    # Main extraction prompt - simplified for insurance
+    # Main extraction prompt - using what we learned from debug
     extraction_prompt = """
     Looking at this facesheet document, please extract ALL available information and format it as JSON.
     
@@ -194,17 +194,26 @@ def extract_facesheet_data(image_paths, debug=False):
     - If SSN is redacted (shows *** or XXX), set it to null
     - If any field is not clearly visible or NOT PRESENT on the document, use null
     - DO NOT make up or infer data - only extract what you can clearly see
+    
+    FOR INSURANCE SECTION - I can see these exact labels in your document:
+    - "ACO Type:" followed by insurance name → insurance_name
+    - "Insurance Information to Patient: SELF" → insured_relation: "SELF"  
+    - "Group Number:" followed by actual number → group_number
+    - "Insurance Company Phone #:" followed by phone → insurance_phone_number
+    - "Mail claim to:" followed by "PO BOX [number]" → insurance_address line_one
+    - "El Paso, TX 79988-1899" (the line after Mail claim to) → insurance_address city, state, zip
+    
+    Split the address properly:
+    - "PO BOX [number]" goes in line_one
+    - "El Paso" goes in city  
+    - "TX" goes in state
+    - "79988-1899" goes in zip
+    
+    FOR OTHER FIELDS:
+    - Look for patient name after "Patient Name:" label
+    - Look for race after "Race:" label 
     - Account numbers may be long (10+ digits) - extract the full number
-    
-    FOR INSURANCE SECTION:
-    - Look for ANY phone number in the insurance area - extract it as insurance_phone_number
-    - Look for ANY address in the insurance area (like "PO BOX" or street address) - extract as insurance_address
-    - Look for ANY policy/member number - extract as policy_number
-    - Look for ANY group number - extract as group_number
-    - If you see "patient name" or actual patient name after insurance labels, use that as insured_name
-    - Look for relationship like "SELF" - extract as insured_relation
-    
-    Don't worry about exact label matching - just find the relevant information in the insurance section.
+    - Medical Record Number: look for "MRN:" - if not found, use null
     
     Format as JSON with this FLATTENED structure:
     {
@@ -262,28 +271,22 @@ def extract_facesheet_data(image_paths, debug=False):
         "insurance_plan_one": {
             "plan_id": null,
             "policy_number": null,
-            "group_number": null,
+            "group_number": "extract from Group Number: label",
             "group_name": null,
-            "insurance_name": null,
+            "insurance_name": "extract from ACO Type: label",
             "insurance_company_id": null,
-            "insurance_phone_number": null,
+            "insurance_phone_number": "extract from Insurance Company Phone #: label",
             "insurance_address": {
-                "line_one": null,
+                "line_one": "extract PO BOX from Mail claim to:",
                 "line_two": null,
-                "city": null,
-                "state": null,
-                "zip": null
+                "city": "extract El Paso from address line",
+                "state": "extract TX from address line", 
+                "zip": "extract 79988-1899 from address line"
             },
             "insured_name": null,
             "insured_dob": null,
-            "insured_address": {
-                "line_one": null,
-                "line_two": null,
-                "city": null,
-                "state": null,
-                "zip": null
-            },
-            "insured_relation": null,
+            "insured_address": null,
+            "insured_relation": "extract from Insurance Information to Patient:",
             "authorization_number": null
         },
         "insurance_plan_two": null,
