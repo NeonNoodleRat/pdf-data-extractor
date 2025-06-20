@@ -152,7 +152,41 @@ def extract_facesheet_data(image_paths, debug=False):
         print(f"Processing {len(image_paths)} facesheet images")
         print("=" * 60)
 
-    # Updated extraction prompt for FLATTENED structure
+    # First pass: Get raw insurance text for debugging
+    debug_prompt = """
+    Look at this facesheet document and find the INSURANCE INFORMATION section.
+    
+    Please extract and list ALL text you can see in the insurance section, line by line.
+    Include any labels, numbers, addresses, phone numbers, etc.
+    
+    Format like this:
+    INSURANCE SECTION TEXT:
+    - Line 1 text here
+    - Line 2 text here
+    - etc.
+    
+    If you cannot find an insurance section, say "NO INSURANCE SECTION FOUND"
+    """
+
+    if debug:
+        try:
+            debug_res = ollama.chat(
+                model=model_name,
+                messages=[
+                    {
+                        'role': 'user',
+                        'content': debug_prompt,
+                        'images': image_paths
+                    }
+                ]
+            )
+            print("🔍 DEBUG - RAW INSURANCE TEXT EXTRACTION:")
+            print(debug_res['message']['content'])
+            print("=" * 60)
+        except Exception as e:
+            print(f"Debug extraction failed: {e}")
+
+    # Main extraction prompt - simplified for insurance
     extraction_prompt = """
     Looking at this facesheet document, please extract ALL available information and format it as JSON.
     
@@ -161,68 +195,16 @@ def extract_facesheet_data(image_paths, debug=False):
     - If any field is not clearly visible or NOT PRESENT on the document, use null
     - DO NOT make up or infer data - only extract what you can clearly see
     - Account numbers may be long (10+ digits) - extract the full number
-    - Look carefully for patient name after "Patient Name:" label
-    - Look for race after "Race:" label 
-    - Only set bed number if you see "Bed:" label - otherwise null
-    - Medical Record Number: look for "MRN:" or "Medical Record Number:" - if not found, use null
     
-    PATIENT INFORMATION TO EXTRACT:
-    - Patient name (appears after "Patient Name:" label)
-    - Race (appears after "Race:" label)
-    - Marital status, veteran status  
-    - SSN (null if redacted), bed/room number (null if not labeled as "Bed:")
-    - Home address (street, city, state, zip)
-    - Phone numbers (home, business/work)
-    - Primary language, county code
-    - Mother's maiden name, alias
-    - Driver's license number
+    FOR INSURANCE SECTION:
+    - Look for ANY phone number in the insurance area - extract it as insurance_phone_number
+    - Look for ANY address in the insurance area (like "PO BOX" or street address) - extract as insurance_address
+    - Look for ANY policy/member number - extract as policy_number
+    - Look for ANY group number - extract as group_number
+    - If you see "patient name" or actual patient name after insurance labels, use that as insured_name
+    - Look for relationship like "SELF" - extract as insured_relation
     
-    GUARANTOR INFORMATION:
-    - Guarantor name, phone, SSN (null if redacted)
-    - Guarantor address
-    - Emergency contact information (name, phone, relation)
-    - Employer information (name, phone, address)
-    
-    INSURANCE INFORMATION (look for sections like "INSURANCE INFORMATION"):
-    CRITICAL: Look for these EXACT labels - be very careful with spacing and punctuation:
-    
-    FOR PHONE NUMBER - Look for ANY of these variations:
-    - "Insurance Company Phone #:"
-    - "Insurance Company Phone:"  
-    - "Phone #:"
-    - "Phone:"
-    - Any phone number in format like "(123) 123-0432" near insurance section
-    
-    FOR INSURANCE ADDRESS - Look for ANY of these variations:
-    - "Mail claim to:"
-    - "Mail claims to:"
-    - "Address:"
-    - "Mailing Address:"
-    - Look for full address with city, state, zip near insurance section
-    
-    FOR POLICY NUMBER - Look for ANY of these variations:
-    - "Policy Number:"
-    - "Policy #:"
-    - "Member ID:"
-    - "ID Number:"
-    
-    OTHER INSURANCE FIELDS:
-    - "Insurance Company Name:" → insurance_name (like "COMMUNITY HLTH MP(CMX)")
-    - "Group Number:" → group_number (extract the actual number)
-    - "Insured Name:" → insured_name
-    - "Relationship to Patient:" → insured_relation (like "SELF")
-    - "Authorization Number:" → authorization_number
-    - "Insured SSN or Certificate #:" → plan_id (ONLY if this exact label exists)
-    
-    DEBUGGING: If you cannot find insurance phone or address, include in your response what insurance-related text you DO see.
-    
-    TOP LEVEL INFORMATION:
-    - Patient gender, date of birth
-    - Account number (may be 10+ digits - extract FULL number)
-    - Medical record number (look for "MRN:" - null if not found)
-    - Visit number
-    - Admit date/time, room assignment
-    - Attending/referring physician, location/department name
+    Don't worry about exact label matching - just find the relevant information in the insurance section.
     
     Format as JSON with this FLATTENED structure:
     {
@@ -307,24 +289,6 @@ def extract_facesheet_data(image_paths, debug=False):
         "insurance_plan_two": null,
         "insurance_plan_three": null
     }
-    
-    EXAMPLE of what to look for in INSURANCE section:
-    - "Insurance Company Name: 1" followed by "COMMUNITY HLTH MP(CMX)" → insurance_name: "COMMUNITY HLTH MP(CMX)"
-    - "Insured Name:" followed by "patient name" → insured_name: "patient name"  
-    - "Relationship to Patient: SELF" → insured_relation: "SELF"
-    - "Group Number:" followed by "0000" → group_number: "0000" (extract actual number, not placeholder)
-    - "Insurance Company Phone #:" followed by "(123) 123-0432" → insurance_phone_number: "(123) 123-0432"
-    - "Mail claim to:" followed by address lines → insurance_address
-    - "Policy Number:" followed by "12345" → policy_number: "12345" (your example shows 12345)
-    - "Authorization Number:" followed by actual number → authorization_number
-    - "Insured SSN or Certificate #:" followed by number → plan_id (ONLY if this label exists)
-    
-    CRITICAL: 
-    - If you see "Policy Number:" label, extract what follows it
-    - If you see "Group Number:" label, extract what follows it (should NOT be "0000" unless that's the actual value)
-    - If you see "Insurance Company Phone #:" label, extract the phone number that follows
-    - If you see "Mail claim to:" extract the full address block that follows
-    - DO NOT extract random numbers - only extract numbers that follow the correct labels
     
     Return ONLY the JSON - no explanations or markdown formatting.
     """
