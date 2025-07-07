@@ -3,3 +3,5 @@ pdf2image
 ollama
 pydantic
 poppler
+pdfplumber
+PyPDF2
